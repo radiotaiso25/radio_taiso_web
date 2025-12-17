@@ -1,0 +1,162 @@
+<!DOCTYPE html><html lang="ja"><head>
+<meta charset="UTF-8"/><title>首ターゲット（自動ミラー＋4方向）</title>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<style>
+  body{margin:0;background:#f6f8fb;font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans JP",sans-serif;color:#111;display:grid;place-items:center;min-height:100vh}
+  .wrap{max-width:860px;width:100%;padding:12px}
+  .grid{display:grid;grid-template-columns:1fr 300px;gap:12px}
+  .card{background:#fff;border:1px solid #e5e7eb;border-radius:14px;box-shadow:0 2px 8px rgba(0,0,0,.04)}
+  .stage{position:relative;overflow:hidden}
+  video{display:none}
+  canvas{width:100%;height:auto;display:block;border-radius:14px}
+  .ui{padding:14px}
+  .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:8px 0}
+  button{border:0;border-radius:12px;padding:12px 16px;font-size:16px;cursor:pointer;background:#2563eb;color:#fff}
+  button.ghost{background:#fff;color:#111;border:1px solid #e5e7eb}
+  .panel{padding:8px 12px;color:#667085;font-size:14px}
+  .big{font-size:58px;font-weight:800;text-align:center;margin:6px 0}
+  .toast{position:absolute;left:50%;top:16px;transform:translateX(-50%);background:#111827;color:#fff;padding:6px 10px;border-radius:999px;font-size:12px;opacity:.92}
+  .hint{font-size:12px;color:#64748b}
+</style>
+<!-- Mediapipe（UMD） -->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js"></script>
+</head><body>
+<div class="wrap">
+  <h1 style="margin:0 0 8px;font-size:20px">首ターゲット（自動ミラー＋4方向）</h1>
+  <div class="grid">
+    <div class="card stage">
+      <video id="video" muted playsinline autoplay></video>
+      <canvas id="canvas"></canvas>
+      <div id="toast" class="toast" style="display:none;">準備中…</div>
+    </div>
+    <div class="card ui">
+      <div class="row">
+        <label>保持 <input id="hold" type="number" value="1.0" step="0.5" style="width:64px"> 秒</label>
+        <span class="hint" id="mirrorInfo">ミラー：自動判定中…</span>
+      </div>
+      <div class="row">
+        <button id="start">開始（10ターゲット）</button>
+        <button id="stop" class="ghost">停止</button>
+      </div>
+      <div class="big" id="dir">--</div>
+      <div class="panel">
+        成功：<b id="score">0</b> / 10　成功率：<b id="acc">--</b>
+      </div>
+      <div class="panel" style="font-size:13px">
+        矢印（← → ↑ ↓）の方向へ顔を向け、指定秒数キープ。成功で音が鳴ります。<br>
+        ※ カメラの左右は自動で最適化（ミラー）します。
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(()=> {
+  const video=document.getElementById('video'), canvas=document.getElementById('canvas'), ctx=canvas.getContext('2d');
+  const startBtn=document.getElementById('start'), stopBtn=document.getElementById('stop'), holdSec=document.getElementById('hold');
+  const dirEl=document.getElementById('dir'), scoreEl=document.getElementById('score'), accEl=document.getElementById('acc'), toast=document.getElementById('toast'), mirrorInfo=document.getElementById('mirrorInfo');
+
+  // ---- レイアウト ----
+  function resize(){ const r=canvas.getBoundingClientRect(), d=window.devicePixelRatio||1; canvas.width=Math.round(r.width*d); canvas.height=Math.round(r.width*0.75*d); }
+  resize(); addEventListener('resize', resize);
+  function show(m,ms=1200){ toast.textContent=m; toast.style.display='block'; setTimeout(()=>toast.style.display='none', ms); }
+
+  // ---- Pose ----
+  let lm=null;
+  const pose=new Pose({locateFile:f=>`https://cdn.jsdelivr.net/npm/@mediapipe/pose/${f}`});
+  pose.setOptions({modelComplexity:1,smoothLandmarks:true,minDetectionConfidence:0.6,minTrackingConfidence:0.5});
+  pose.onResults(r=> { lm=r.poseLandmarks||null; calibrateMirror(lm); });
+
+  const cam=new Camera(video,{onFrame:async()=>{ try{ await pose.send({image:video}); }catch(_){} },width:640,height:480});
+  cam.start().catch(()=>show('カメラ権限を許可してください'));
+
+  // ---- 自動ミラー判定（左肩x と 右肩x の多数決）----
+  let autoMirror=null, votes=0, samples=0;
+  function calibrateMirror(lm){
+    if (autoMirror!==null || !lm || lm.length<13) return;
+    const lSh=lm[11], rSh=lm[12]; if(!lSh||!rSh) return;
+    votes += (lSh.x > rSh.x) ? 1 : -1;
+    if (++samples >= 12){
+      autoMirror = (votes > 0);
+      mirrorInfo.textContent = 'ミラー：' + (autoMirror ? 'ON（自動）' : 'OFF（自動）');
+      show('ミラーを自動調整しました');
+    }
+  }
+
+  // ---- 描画：ビデオもガイドも同じ座標変換の中で（ズレ防止）----
+  function draw(){
+    ctx.save();
+    if (autoMirror) { ctx.translate(canvas.width,0); ctx.scale(-1,1); }
+    try{ ctx.drawImage(video,0,0,canvas.width,canvas.height); }catch(_){}
+    if (lm){
+      drawConnectors(ctx,lm,POSE_CONNECTIONS,{color:'#16a34a',lineWidth:3});
+      drawLandmarks(ctx,lm,{color:'#22c55e',lineWidth:1,radius:2});
+    }
+    ctx.restore();
+    requestAnimationFrame(draw);
+  } requestAnimationFrame(draw);
+
+  // ---- 音（成功時）----
+  const audio = new (window.AudioContext||window.webkitAudioContext)();
+  function successChime(){
+    const t0=audio.currentTime;
+    const o1=audio.createOscillator(), g1=audio.createGain();
+    o1.type='sine'; o1.frequency.value=880; o1.connect(g1); g1.connect(audio.destination);
+    g1.gain.value=0.0001; g1.gain.exponentialRampToValueAtTime(0.18,t0+0.02);
+    o1.start(t0); o1.stop(t0+0.12);
+    const o2=audio.createOscillator(), g2=audio.createGain();
+    o2.type='sine'; o2.frequency.value=1174.7; o2.connect(g2); g2.connect(audio.destination);
+    g2.gain.value=0.0001; g2.gain.exponentialRampToValueAtTime(0.16,t0+0.18);
+    o2.start(t0+0.13); o2.stop(t0+0.26);
+  }
+
+  // ---- 判定（表示座標系での yaw/pitch）----
+  function xDisp(x){ return autoMirror ? (1 - x) : x; }  // 横反転の有無を反映
+  function yawPitchOK(dir){
+    if(!lm || lm.length<13) return false;
+    const nose=lm[0], le=lm[7], re=lm[8]; if(!nose||!le||!re) return false;
+
+    // 表示上の左右に合わせる
+    const noseX = xDisp(nose.x), leX = xDisp(le.x), reX = xDisp(re.x);
+    const midX=(leX+reX)/2, midY=(le.y+re.y)/2; // 上下は反転の影響なし
+    const yaw   = noseX - midX;        // +右 / -左
+    const pitch = (midY - nose.y);     // +上 / -下
+
+    const thYaw = 0.035, thUp = 0.03, thDown = 0.03;
+
+    if (dir==='←') return (yaw < -thYaw);
+    if (dir==='→') return (yaw >  thYaw);
+    if (dir==='↑') return (pitch > thUp);
+    if (dir==='↓') return ((-pitch) > thDown); // noseがmidより下 → 下向き
+    return false;
+  }
+
+  // ---- ゲーム本体（← → ↑ ↓ の4方向ランダム）----
+  const DIRS=['←','→','↑','↓']; let running=false,total=10,seen=0,score=0,current='←',hold=0;
+  function next(){ current = DIRS[Math.floor(Math.random()*DIRS.length)]; dirEl.textContent=current; seen++; }
+  function reset(){ running=false; seen=0; score=0; hold=0; dirEl.textContent='--'; scoreEl.textContent='0'; accEl.textContent='--'; }
+
+  let tPrev=performance.now();
+  function tick(){
+    if(!running) return;
+    const now=performance.now(), dt=(now-tPrev)/1000; tPrev=now;
+
+    if (yawPitchOK(current)) hold += dt; else hold = 0;
+
+    if (hold >= Number(holdSec.value)){
+      score++; scoreEl.textContent=String(score);
+      const acc=Math.round((score/seen)*100); accEl.textContent=acc+'%';
+      successChime();
+      if (seen>=total){ running=false; show(`終了：${score}/${total}（${acc}%）`,1800); }
+      else next();
+      hold = 0;
+    }
+    setTimeout(tick, 30);
+  }
+
+  startBtn.onclick=()=>{ if(running) return; reset(); running=true; tPrev=performance.now(); next(); tick(); show('矢印の方向へ顔を向けてキープ'); };
+  stopBtn.onclick =()=>{ running=false; show('停止'); };
+})();
+</script></body></html>

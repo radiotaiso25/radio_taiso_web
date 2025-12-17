@@ -1,0 +1,195 @@
+body {
+  font-family: sans-serif;
+  text-align: center;
+  margin: 40px;
+  background: #f8fbff;
+  color: #333;
+}
+
+/* ====== カード共通デザイン ====== */
+.card {
+  background: #ffffff;
+  padding: 25px;
+  margin: 30px auto;
+  border-radius: 14px;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.08);
+  max-width: 850px;
+}
+
+.section-title {
+  font-size: 22px;
+  font-weight: bold;
+  margin-bottom: 18px;
+  display: inline-block;
+  padding: 6px 14px;
+  border-radius: 8px;
+  background: #eaf3ff;
+  color: #1a4c8a;
+}
+
+.score-box {
+  max-width: 280px;
+  margin: 0 auto 15px auto;
+  padding: 15px;
+  border-radius: 12px;
+  font-size: 28px;
+  font-weight: bold;
+}
+
+/* 出力ファイルパス */
+.result-path {
+  font-size: 14px;
+  color: #666;
+}
+
+/* 総合メッセージ */
+.overall-message {
+  font-size: 20px;
+  font-weight: bold;
+}
+
+/* テーブル */
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 15px auto;
+  font-size: 16px;
+}
+
+th,
+td {
+  border: 1px solid #ddd;
+  padding: 10px;
+}
+
+th {
+  background: #f0f7ff;
+  font-weight: bold;
+}
+
+/* ボタン・リンク */
+button {
+  margin-top: 30px;
+  padding: 14px 28px;
+  background: #4caf50;
+  color: white;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 18px;
+}
+
+a {
+  display: block;
+  margin-top: 10px;
+  color: #1a4c8a;
+}
+
+/* アドバイスの見た目 */
+.advice-ex-name {
+  margin-top: 20px;
+  font-weight: bold;
+  font-size: 18px;
+}
+
+.advice-message {
+  max-width: 700px;
+  margin: 0 auto 18px auto;
+  text-align: left;
+  line-height: 1.6;
+}
+
+/* 動きが小さかった部位リスト */
+.feedback-list {
+  list-style: none;
+  padding: 0;
+}
+
+.feedback-list li {
+  margin: 6px 0;
+}
+
+/* ★ おすすめゲーム：折りたたみ用 */
+.recommend-wrapper {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 1000;
+  font-size: 13px;
+  font-family: inherit;
+}
+
+/* 右上にちょこんと出ているボタン */
+.recommend-toggle {
+  border: none;
+  border-radius: 999px;
+  padding: 6px 14px;
+  background: #ff9800;
+  color: #fff;
+  font-weight: bold;
+  cursor: pointer;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.18);
+}
+
+/* 開いたときの中身のカード（初期は非表示） */
+.recommend-box {
+  display: none;
+  margin-top: 8px;
+  width: 260px;
+  background: #fff8e1;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  padding: 12px 14px 14px 14px;
+  text-align: left;
+}
+
+.recommend-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.recommend-title {
+  font-size: 12px;
+  font-weight: bold;
+  color: #e65100;
+}
+
+.recommend-close {
+  border: none;
+  background: transparent;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  color: #999;
+}
+
+.recommend-name {
+  font-size: 15px;
+  font-weight: bold;
+  margin-bottom: 4px;
+}
+
+.recommend-reason {
+  font-size: 12px;
+  color: #555;
+  margin-bottom: 10px;
+  line-height: 1.4;
+}
+
+.recommend-btn {
+  display: inline-block;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: #ff9800;
+  color: #fff;
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: bold;
+}
+
+/* wrapper に .open が付いたときだけカードを表示 */
+.recommend-wrapper.open .recommend-box {
+  display: block;
+}

@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>ログイン - ラジオ体操評価システム</title>
+
+  <!-- CSS 読み込み（Flaskの場合） -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/login.css') }}">
+</head>
+<body>
+  <div class="box">
+    <h1>ラジオ体操 評価システム</h1>
+    <p>ユーザー名を入力して開始してください。</p>
+
+    <form method="POST" action="/login">
+      <input type="text" name="user_id" placeholder="例）suzuki,001" />
+      <br />
+      <button type="submit">ログイン</button>
+    </form>
+
+    <p>または</p>
+
+    <!-- ゲスト利用 -->
+    <form action="/guest" method="post">
+      <button type="submit" class="guest-btn">ゲストとして始める</button>
+    </form>
+
+    {% if error %}
+      <div class="error">{{ error }}</div>
+    {% endif %}
+  </div>
+</body>
+</html>

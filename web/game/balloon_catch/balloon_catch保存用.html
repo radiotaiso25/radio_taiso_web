@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>手キャッチゲーム</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    canvas { border: 1px solid black; max-width: 100%; height: auto; }
+    #score { font-size: 20px; margin: 10px; }
+    #unlock-audio {
+      position: absolute; right: 10px; top: 10px;
+      padding: 6px 10px; font-size: 14px; display: none;
+    }
+    body { margin: 0; overflow: hidden; }
+  </style>
+
+  <!-- ✅ 同フォルダのCSSを読み込む（ファイル名は必要に応じて変更/追加してください） -->
+  <link rel="stylesheet" href="{{ url_for('game_asset', slug='balloon_catch', asset='balloon_catch.css') }}">
+</head>
+<body>
+  <video id="video" autoplay playsinline style="display:none;"></video>
+  <canvas id="canvas"></canvas>
+  <div id="score">スコア: 0</div>
+  <button id="unlock-audio">🔊 音を有効にする</button>
+
+  <!-- TensorFlow.jsとhandposeモデル -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/handpose"></script>
+
+  <script>
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const scoreEl = document.getElementById('score');
+    const unlockBtn = document.getElementById('unlock-audio');
+
+    let model;
+    let score = 0;
+    let frameCount = 0;
+    let handRects = [];
+
+    const ball = { x: 200, y: 0, radius: 24, speed: 3.2 };
+
+    // 風船画像（同フォルダ）
+    const balloonImg = new Image();
+    balloonImg.src = "{{ url_for('game_asset', slug='balloon_catch', asset='balloon.png') }}";
+    let balloonReady = false;
+    balloonImg.onload = () => { balloonReady = true; };
+
+    // 効果音（同フォルダ）
+    const catchSound = new Audio("{{ url_for('game_asset', slug='balloon_catch', asset='catch.mp3') }}");
+    catchSound.preload = "auto";
+    catchSound.volume = 0.9;
+
+    async function setupCamera() {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
+      video.srcObject = stream;
+      return new Promise(resolve => { video.onloadedmetadata = () => resolve(); });
+    }
+
+    function resizeCanvas() {
+      // カメラ比に合わせてキャンバスを調整（初回とリサイズ時）
+      const w = video.videoWidth || 640;
+      const h = video.videoHeight || 480;
+      canvas.width = w;
+      canvas.height = h;
+    }
+
+    async function main() {
+      await setupCamera();
+      video.play();
+      resizeCanvas();
+      window.addEventListener('resize', resizeCanvas);
+
+      model = await handpose.load();
+      requestAnimationFrame(update);
+    }
+
+    async function update() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // ミラー表示（映像）
+      ctx.save(); ctx.scale(-1, 1); ctx.translate(-canvas.width, 0);
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      ctx.restore();
+
+      // 手の検出（2フレームに1回）
+      if (frameCount % 2 === 0) {
+        const predictions = await model.estimateHands(video);
+        handRects = [];
+        for (const hand of predictions) {
+          const xs = hand.landmarks.map(p => p[0]);
+          const ys = hand.landmarks.map(p => p[1]);
+          const minX = Math.min(...xs), maxX = Math.max(...xs);
+          const minY = Math.min(...ys), maxY = Math.max(...ys);
+          const mirroredMinX = canvas.width - maxX;
+          const mirroredMaxX = canvas.width - minX;
+          handRects.push({ x: mirroredMinX, y: minY, width: mirroredMaxX - mirroredMinX, height: maxY - minY });
+        }
+      }
+      frameCount++;
+
+      // デバッグ：手の枠
+      for (const rect of handRects) {
+        ctx.strokeStyle = 'red';
+        ctx.strokeRect(rect.x, rect.y, rect.width, rect.height);
+      }
+
+      // 風船描画（画像 or 円）
+      let effR = ball.radius;
+      if (balloonReady) {
+        const targetH = Math.max(70, Math.min(110, ball.radius * 3.2));
+        const ratio = balloonImg.naturalWidth / balloonImg.naturalHeight || 0.7;
+        const targetW = targetH * ratio;
+        ctx.drawImage(balloonImg, ball.x - targetW/2, ball.y - targetH/2, targetW, targetH);
+        effR = Math.max(targetW, targetH) * 0.45; // 当たり判定の半径近似
+      } else {
+        ctx.beginPath(); ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI*2);
+        ctx.fillStyle = 'blue'; ctx.fill();
+      }
+
+      // 落下
+      ball.y += ball.speed;
+
+      // キャッチ判定
+      for (const rect of handRects) {
+        if (ball.x > rect.x && ball.x < rect.x + rect.width &&
+            ball.y + effR > rect.y && ball.y - effR < rect.y + rect.height) {
+          playCatchSound();
+          score++;
+          scoreEl.textContent = `スコア: ${score}`;
+          resetBall();
+          break;
+        }
+      }
+
+      // 画面外でリセット
+      if (ball.y - effR > canvas.height) resetBall();
+
+      requestAnimationFrame(update);
+    }
+
+    function resetBall() {
+      ball.x = Math.random() * canvas.width;
+      ball.y = -20;
+      ball.speed = 3 + Math.random() * 2;
+    }
+
+    async function playCatchSound() {
+      try {
+        catchSound.currentTime = 0;
+        await catchSound.play();
+      } catch (e) {
+        unlockBtn.style.display = 'inline-block';
+      }
+    }
+
+    unlockBtn.addEventListener('click', async () => {
+      try {
+        await catchSound.play();
+        catchSound.pause();
+        catchSound.currentTime = 0;
+        unlockBtn.style.display = 'none';
+      } catch (e) {}
+    });
+
+    // 外部JSから使えるよう最低限のフックを公開（任意）
+    window.balloonGame = {
+      resetBall, playCatchSound,
+      get state() { return { score, handRects: [...handRects], ball: { ...ball } }; }
+    };
+
+    main();
+  </script>
+
+  <!-- ✅ 同フォルダのJSを読み込む（必要に応じて増やしてください） -->
+  <script src="{{ url_for('game_asset', slug='balloon_catch', asset='balloon_catch.js') }}"></script>
+</body>
+</html>

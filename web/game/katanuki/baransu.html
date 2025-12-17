@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>人型マスク耐久ゲーム（3,2,1→10秒）</title>
+
+  <style>
+    body { text-align: center; background: #eef; margin: 0; font-family: system-ui, sans-serif; }
+
+    .wrap {
+      position: relative; width: 640px; height: 480px; margin: 16px auto;
+    }
+    /* 見た目は鏡表示（左右反転）に統一：video / mask / canvas を重ねる */
+    /* 旧: .wrap video, .wrap canvas, .wrap img { transform: scaleX(-1); } */
+    .wrap video, .wrap img {
+      position: absolute; inset: 0; width: 640px; height: 480px; display: block;
+      transform: scaleX(-1);         /* ← 鏡なのは映像とマスクだけ */
+    }
+    .wrap canvas {
+      position: absolute; inset: 0; width: 640px; height: 480px; display: block;
+      /* ← 反転なし（テキストは正向きのまま描ける） */
+    }
+    /* レイヤ順：video(奥) → mask(中) → canvas(手前) */
+    #overlayMask { z-index: 1; pointer-events: none; }
+    #output      { z-index: 2; pointer-events: none; }
+
+    /* スタートボタン（状態に応じて出し入れ） */
+    #startBtn {
+      display: inline-block; margin: 8px auto; padding: 10px 18px; font-size: 18px;
+      border: 0; border-radius: 12px; background: #2b78e4; color: #fff; cursor: pointer;
+    }
+    #startBtn:disabled { opacity: .6; cursor: not-allowed; }
+  </style>
+
+  <!-- MediaPipe CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js"></script>
+</head>
+<body>
+  <h1>人型マスク耐久ゲーム</h1>
+  <p style="margin:0 0 8px;">枠に当たったら<strong>OUT</strong>！ 3,2,1のあと<strong>10秒耐久</strong>だよ🔥</p>
+  <button id="startBtn">スタート</button>
+
+  <div class="wrap">
+    <video id="video" autoplay playsinline></video>
+    <!-- 👇 ここを手元のマスク画像名に変更OK（例：mask_silhouette_T.png） -->
+    <img id="overlayMask"
+          src="{{ url_for('game_asset', slug='katanuki', asset='mask_silhouette.png') }}"
+          alt="mask" />
+    <canvas id="output"></canvas>
+  </div>
+
+  <script>
+    // ─────────────────────────────────────────
+    // 参照ノード
+    // ─────────────────────────────────────────
+    const startBtn = document.getElementById('startBtn');
+    const video    = document.getElementById('video');
+    const canvas   = document.getElementById('output');
+    const ctx      = canvas.getContext('2d');
+    const overlayMask = document.getElementById('overlayMask');
+
+    // ─────────────────────────────────────────
+    // 見た目と判定の整合：鏡表示にしてるので x 座標は 1-x で照合
+    // ─────────────────────────────────────────
+    const MIRRORED = true;
+
+    // 顔ランドマークを非表示にするためのインデックス
+    const FACE_IDX = [0,1,2,3,4,5,6,7,8,9,10];
+
+    // 当たり判定に使う主要ランドマーク（必要に応じて増減OK）
+    const CHECK_POINTS = [0,11,12,13,14,15,16,23,24,25,26,27,28];
+
+    // マスクの不透明閾値（α>=この値→ブロック領域＝枠/外側）
+    const ALPHA_TH = 10;
+
+    // 「枠に触れた」扱いの半径（px）＆ サンプリング間隔
+    const CHECK_RADIUS_PX = 6;
+    const STEP_PX = 2;
+
+    // 線・点の色（SAFE時）と OUT時の線色
+    const CONNECTOR_COLOR_SAFE = '#00B3FF';
+    const CONNECTOR_COLOR_OUT  = '#FF2D2D'; // ← 当たってたらこの赤に
+    const LANDMARK_COLOR       = '#FFD400';
+
+    // ゲーム設定：カウントダウン秒数 / 本編の耐久秒数
+    const COUNTDOWN_SEC = 3;
+    const DURATION_SEC  = 10;
+
+    // ─────────────────────────────────────────
+    // マスク画像のピクセル参照（オフスクリーン）
+    // ─────────────────────────────────────────
+    const maskCanvas = document.createElement('canvas');
+    const maskCtx    = maskCanvas.getContext('2d');
+    let maskReady = false, maskW = 0, maskH = 0, maskImageData = null;
+
+    overlayMask.addEventListener('load', () => {
+      maskW = maskCanvas.width  = overlayMask.naturalWidth  || 640;
+      maskH = maskCanvas.height = overlayMask.naturalHeight || 480;
+      maskCtx.clearRect(0,0,maskW,maskH);
+      maskCtx.drawImage(overlayMask, 0, 0, maskW, maskH);
+      maskImageData = maskCtx.getImageData(0, 0, maskW, maskH).data;
+      maskReady = true;
+      // マスク読み込み完了までは開始不可にしとく（ズレ防止）
+      startBtn.disabled = false;
+    });
+
+    // 初期はマスク未読込なのでボタン無効化（画像読み込みで解除）
+    startBtn.disabled = true;
+
+    function isBlockedPixel(x, y) {
+      if (x < 0 || y < 0 || x >= maskW || y >= maskH) return true; // 画面外はブロック扱い
+      const idx = (Math.floor(y) * maskW + Math.floor(x)) * 4;
+      const alpha = maskImageData[idx + 3];
+      return alpha >= ALPHA_TH; // 不透明＝枠/外側（NG）
+    }
+
+    function hitFrameAround(x, y, r = CHECK_RADIUS_PX, step = STEP_PX) {
+      for (let dy = -r; dy <= r; dy += step) {
+        for (let dx = -r; dx <= r; dx += step) {
+          if (dx*dx + dy*dy > r*r) continue; // 円領域内のみ
+          if (isBlockedPixel(x + dx, y + dy)) return true;
+        }
+      }
+      return false;
+    }
+
+    // ─────────────────────────────────────────
+    // ゲーム状態管理（idle → countdown → playing → finished）
+    // ─────────────────────────────────────────
+    let gameState = 'idle';
+    let tCountdownStart = 0; // performance.now() の値（ms）
+    let tGameStart      = 0;
+    let survivedSec     = 0;
+    let resultText      = ''; // "CLEAR!" or "GAME OVER"
+
+    function nowSec() { return performance.now() / 1000; }
+
+    function setState(next) {
+      gameState = next;
+      if (next === 'idle') {
+        startBtn.style.display = 'inline-block';
+        startBtn.textContent = 'スタート';
+      }
+      if (next === 'countdown') {
+        startBtn.style.display = 'none';
+        tCountdownStart = nowSec();
+      }
+      if (next === 'playing') {
+        tGameStart = nowSec();
+        survivedSec = 0;
+      }
+      if (next === 'finished') {
+        startBtn.style.display = 'inline-block';
+        startBtn.textContent = 'もう一度';
+      }
+    }
+
+    startBtn.addEventListener('click', () => {
+      if (!maskReady) return; // 念のため
+      if (gameState === 'idle' || gameState === 'finished') {
+        setState('countdown');
+      }
+    });
+
+    // ─────────────────────────────────────────
+    // MediaPipe Pose 設定
+    // ─────────────────────────────────────────
+    const pose = new Pose({
+      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
+    });
+    pose.setOptions({
+      modelComplexity: 1,
+      smoothLandmarks: true,
+      enableSegmentation: false,
+      minDetectionConfidence: 0.5,
+      minTrackingConfidence: 0.5
+    });
+
+    pose.onResults(results => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      if (!results.poseLandmarks) return;
+
+      const lm = results.poseLandmarks;
+
+      // 1) マスク当たり判定：主要ランドマークの近傍が不透明なら OUT
+      let isOut = false;
+      if (maskReady) {
+        for (const i of CHECK_POINTS) {
+          const p = lm[i];
+          if (!p) continue;
+          if (p.visibility !== undefined && p.visibility < 0.4) continue;
+
+          let x = p.x, y = p.y;
+          if (MIRRORED) x = 1 - x;  // 鏡表示の見た目に合わせる
+          const px = x * maskW;
+          const py = y * maskH;
+
+          if (hitFrameAround(px, py)) { isOut = true; break; }
+        }
+      }
+
+      // 2) ゲーム進行ロジック
+      const tNow = nowSec();
+
+      if (gameState === 'countdown') {
+        const elapsed = tNow - tCountdownStart;
+        const remain  = Math.ceil(COUNTDOWN_SEC - elapsed);
+        // カウント表示（3,2,1 → START!）
+        ctx.save();
+        ctx.font = "bold 96px system-ui, sans-serif";
+        ctx.fillStyle = "rgba(255,255,255,0.95)";
+        ctx.textAlign = "center";
+        ctx.fillText(remain > 0 ? remain : "START!", canvas.width/2, 150);
+        ctx.restore();
+
+        if (elapsed >= COUNTDOWN_SEC) {
+          setState('playing');
+        }
+      }
+
+      if (gameState === 'playing') {
+        survivedSec = Math.max(0, tNow - tGameStart);
+
+        // 当たったら即終了
+        if (isOut) {
+          resultText = "GAME OVER";
+          setState('finished');
+        }
+        // 10秒完走でクリア
+        else if (survivedSec >= DURATION_SEC) {
+          survivedSec = DURATION_SEC;
+          resultText = "CLEAR!";
+          setState('finished');
+        }
+
+        // 残り時間表示
+        const remain = Math.max(0, DURATION_SEC - survivedSec);
+        ctx.save();
+        ctx.font = "bold 28px system-ui, sans-serif";
+        ctx.fillStyle = "rgba(255,255,255,0.95)";
+        ctx.fillText(`残り ${remain.toFixed(1)} 秒`, 20, 36);
+        ctx.restore();
+      }
+
+      if (gameState === 'finished') {
+        // リザルト表示
+        ctx.save();
+        ctx.font = "bold 64px system-ui, sans-serif";
+        ctx.fillStyle = resultText === "CLEAR!" ? "rgba(0,200,0,0.95)" : "rgba(255,0,0,0.95)";
+        ctx.textAlign = "center";
+        ctx.fillText(resultText, canvas.width/2, 120);
+        ctx.font = "bold 24px system-ui, sans-serif";
+        ctx.fillStyle = "rgba(255,255,255,0.95)";
+        ctx.fillText(`生存タイム：${survivedSec.toFixed(2)} 秒`, canvas.width/2, 160);
+        ctx.fillText("ボタンでリトライ", canvas.width/2, 192);
+        ctx.restore();
+      }
+
+      // 3) 骨格描画：当たってたら線（コネクタ）を赤にする
+      const landmarksNoFace = lm.map((p, idx) => FACE_IDX.includes(idx) ? null : p);
+      const connectionsNoFace = POSE_CONNECTIONS.filter(([a,b]) =>
+        !FACE_IDX.includes(a) && !FACE_IDX.includes(b)
+      );
+
+      const connectorColor = isOut ? CONNECTOR_COLOR_OUT : CONNECTOR_COLOR_SAFE;
+      
+      // ← ここがポイント：描画用に“だけ”左右反転した座標を作る
+      const drawLm = MIRRORED
+        ? landmarksNoFace.map(p => p ? ({ ...p, x: 1 - p.x }) : null)
+        : landmarksNoFace;
+      // 反転なしのキャンバスに、反転済み座標を一度だけ描画
+      drawConnectors(ctx, drawLm, connectionsNoFace, { color: connectorColor, lineWidth: 3 });
+      drawLandmarks(ctx, drawLm.filter(Boolean), { color: LANDMARK_COLOR, lineWidth: 2 });
+
+      // 4) 補助：アイドル時の簡易ヘルプ
+      if (gameState === 'idle') {
+        ctx.save();
+        ctx.font = "bold 20px system-ui, sans-serif";
+        ctx.fillStyle = "rgba(255,255,255,0.95)";
+        ctx.fillText("人型の透明部分に体を入れてね", 16, 32);
+        ctx.restore();
+      }
+    });
+
+    // カメラ起動
+    const camera = new Camera(video, {
+      onFrame: async () => { await pose.send({ image: video }); },
+      width: 640, height: 480
+    });
+    camera.start();
+
+    // 初期状態へ
+    setState('idle');
+  </script>
+</body>
+</html>

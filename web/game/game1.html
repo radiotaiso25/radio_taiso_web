@@ -1,0 +1,332 @@
+<!DOCTYPE html><html lang="ja"><head>
+<meta charset="UTF-8"/><title>ポーズ記憶ゲーム（やさしい）</title>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<style>
+  body{margin:0;background:#f6f8fb;font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans JP",sans-serif;color:#111;display:grid;place-items:center;min-height:100vh}
+  .wrap{max-width:980px;width:100%;padding:12px}
+  .grid{display:grid;grid-template-columns:1fr 320px;gap:12px}
+  .card{background:#fff;border:1px solid #e5e7eb;border-radius:14px;box-shadow:0 2px 8px rgba(0,0,0,.04)}
+  .stage{position:relative;overflow:hidden}
+  video{display:none}
+  canvas{width:100%;height:auto;display:block;border-radius:14px}
+  .ui{padding:14px}
+  .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:8px 0}
+  button{border:0;border-radius:12px;padding:12px 16px;font-size:16px;cursor:pointer;background:#2563eb;color:#fff}
+  button.ghost{background:#fff;color:#111;border:1px solid #e5e7eb}
+  .stat{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+  .item{background:#fafafa;border:1px solid #e5e7eb;border-radius:10px;padding:8px}
+  .k{font-size:12px;color:#667085}.v{font-weight:700}
+  .big{font-size:56px;font-weight:800;text-align:center;margin:6px 0}
+  .toast{position:absolute;left:50%;top:16px;transform:translateX(-50%);background:#111827;color:#fff;padding:6px 10px;border-radius:999px;font-size:12px;opacity:.92}
+  .hint{font-size:12px;color:#64748b}
+  .meter{height:16px;background:#f1f5f9;border-radius:999px;overflow:hidden;border:1px solid #e5e7eb;margin-top:6px}
+  .meter>div{height:100%;width:0%;background:#22c55e;transition:width .08s linear}
+  .seq{display:flex;gap:8px;flex-wrap:wrap}
+  .tag{border:1px solid #e5e7eb;border-radius:999px;padding:2px 10px;font-size:12px;background:#f8fafc}
+  .tag.now{background:#dcfce7;border-color:#86efac}
+</style>
+<!-- Mediapipe UMD -->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js"></script>
+</head><body>
+<div class="wrap">
+  <h1 style="margin:0 0 8px;font-size:20px">ポーズ記憶ゲーム（やさしい・座位OK）</h1>
+  <div class="grid">
+    <div class="card stage">
+      <video id="video" muted playsinline autoplay></video>
+      <canvas id="canvas"></canvas>
+      <div id="toast" class="toast" style="display:none;">準備中…</div>
+    </div>
+    <div class="card ui">
+      <div class="row">
+        <label><input id="seated" type="checkbox" checked> 座位モード</label>
+        <span class="hint" id="mirrorInfo">ミラー：自動判定中…</span>
+      </div>
+
+      <div class="row">
+        <button id="start">開始</button>
+        <button id="stop" class="ghost">停止</button>
+      </div>
+
+      <div class="row">
+        <div class="item" style="flex:1"><div class="k">レベル</div><div class="v" id="level">0</div></div>
+        <div class="item" style="flex:1"><div class="k">状態</div><div class="v" id="phase">--</div></div>
+      </div>
+
+      <div class="big" id="cue">ポーズ表示</div>
+
+      <div class="meter"><div id="meter"></div></div>
+      <div class="row" style="justify-content:space-between;color:#667085;font-size:12px;margin-top:2px">
+        <span>キープ進捗</span><span id="meterPct">0%</span>
+      </div>
+
+      <div class="row" style="align-items:flex-start">
+        <div style="width:100%">
+          <div class="k" style="margin-bottom:4px">今回のシークエンス</div>
+          <div id="seq" class="seq"></div>
+        </div>
+      </div>
+
+      <div class="row" style="font-size:12px;color:#667085">
+        画面の合図に合わせて**同じ順番**でポーズを行い、各ポーズを約1秒キープ。<br>
+        成功で「ピロリン♪」、間違いor制限時間超過で「ブブッ」→ そこで終了です。
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(()=> {
+  // ===== DOM =====
+  const video = document.getElementById('video');
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
+  const toast = document.getElementById('toast');
+  const startBtn = document.getElementById('start');
+  const stopBtn  = document.getElementById('stop');
+  const seated   = document.getElementById('seated');
+  const mirrorInfo = document.getElementById('mirrorInfo');
+
+  const levelEl = document.getElementById('level');
+  const phaseEl = document.getElementById('phase');
+  const cueEl   = document.getElementById('cue');
+  const meterEl = document.getElementById('meter');
+  const meterPct= document.getElementById('meterPct');
+  const seqEl   = document.getElementById('seq');
+
+  function show(msg,ms=1200){ toast.textContent=msg; toast.style.display='block'; setTimeout(()=>toast.style.display='none', ms); }
+  function resize(){ const r=canvas.getBoundingClientRect(), d=window.devicePixelRatio||1; canvas.width=Math.round(r.width*d); canvas.height=Math.round(r.width*0.75*d); }
+  resize(); addEventListener('resize', resize);
+
+  // ===== MediaPipe Pose =====
+  let lm = null;
+  const pose = new Pose({ locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${f}` });
+  pose.setOptions({ modelComplexity:1, smoothLandmarks:true, minDetectionConfidence:0.6, minTrackingConfidence:0.5 });
+  pose.onResults(r => { lm = r.poseLandmarks || null; calibrateMirror(lm); });
+
+  const camera = new Camera(video, { onFrame: async()=>{ try{ await pose.send({image:video}); }catch(_){} }, width:640, height:480 });
+  camera.start().catch(()=> show('カメラ権限を許可してください'));
+
+  // ===== 自動ミラー判定 =====
+  let autoMirror = null, votes=0, samples=0;
+  function calibrateMirror(lm){
+    if (autoMirror!==null || !lm || lm.length<13) return;
+    const lSh=lm[11], rSh=lm[12]; if(!lSh||!rSh) return;
+    votes += (lSh.x > rSh.x) ? 1 : -1; // 左肩x>右肩x なら非ミラー映像 → 反転表示
+    if (++samples >= 12){
+      autoMirror = (votes > 0);
+      mirrorInfo.textContent = 'ミラー：' + (autoMirror ? 'ON（自動）' : 'OFF（自動）');
+      show('ミラーを自動調整しました');
+    }
+  }
+
+  // ===== 描画（ビデオ＆ガイドを同座標で）=====
+  function draw(){
+    ctx.save();
+    if (autoMirror){ ctx.translate(canvas.width,0); ctx.scale(-1,1); }
+    try{ ctx.drawImage(video,0,0,canvas.width,canvas.height); }catch(_){}
+    if (lm){ drawConnectors(ctx,lm,POSE_CONNECTIONS,{color:'#16a34a',lineWidth:3}); drawLandmarks(ctx,lm,{color:'#22c55e',lineWidth:1,radius:2}); }
+    ctx.restore();
+    requestAnimationFrame(draw);
+  } requestAnimationFrame(draw);
+
+  // ===== 音 =====
+  const audio = new (window.AudioContext||window.webkitAudioContext)();
+  function beep(freq=880, dur=0.12, t=audio.currentTime){
+    const o=audio.createOscillator(), g=audio.createGain();
+    o.type='sine'; o.frequency.value=freq; o.connect(g); g.connect(audio.destination);
+    g.gain.value=0.0001; g.gain.exponentialRampToValueAtTime(0.18,t+0.02);
+    o.start(t); o.stop(t+dur);
+  }
+  function chime(){ const t=audio.currentTime; beep(880,0.12,t); beep(1175,0.12,t+0.14); }
+  function buzz(){ const t=audio.currentTime; beep(220,0.18,t); beep(180,0.18,t+0.12); }
+
+  // ===== ポーズ定義（やさしい）=====
+  const POSES = [
+    { id:'L_UP', label:'左手アップ 🙋‍♂️', check:isLeftUp },
+    { id:'R_UP', label:'右手アップ 🙋‍♀️', check:isRightUp },
+    { id:'B_UP', label:'両手アップ 🙌',   check:isBothUp },
+    { id:'CLAP', label:'手を前で合わせる 👏', check:isClap },
+    { id:'HIPS', label:'手を腰に 🤲', check:isHandsOnHips }
+  ];
+
+  function thRaise(){ return (seated.checked ? 0.045 : 0.06); }       // 肩より上（y差）
+  function thNear(){ return (seated.checked ? 0.10  : 0.08); }       // 近接（正規化距離）
+  function thClap(){ return (seated.checked ? 0.11  : 0.09); }       // 両手の距離
+
+  function isLeftUp(l){
+    if(!l||l.length<17) return false; const sh=l[11], wr=l[15]; if(!sh||!wr) return false;
+    return (sh.y - wr.y) >= thRaise();
+  }
+  function isRightUp(l){
+    if(!l||l.length<17) return false; const sh=l[12], wr=l[16]; if(!sh||!wr) return false;
+    return (sh.y - wr.y) >= thRaise();
+  }
+  function isBothUp(l){ return isLeftUp(l) && isRightUp(l); }
+  function isClap(l){
+    if(!l||l.length<17) return false; const lw=l[15], rw=l[16]; if(!lw||!rw) return false;
+    const d = Math.hypot(lw.x-rw.x, lw.y-rw.y);
+    return d <= thClap();
+  }
+  function isHandsOnHips(l){
+    if(!l||l.length<25) return false;
+    const lw=l[15], rw=l[16], lh=l[23], rh=l[24], lsh=l[11], rsh=l[12];
+    if(!lw||!rw||!lh||!rh||!lsh||!rsh) return false;
+    const dl = Math.hypot(lw.x-lh.x, lw.y-lh.y);
+    const dr = Math.hypot(rw.x-rh.x, rw.y-rh.y);
+    const belowShoulders = (lw.y > lsh.y - 0.02) && (rw.y > rsh.y - 0.02); // 肩よりかなり下
+    return (dl<=thNear() && dr<=thNear() && belowShoulders);
+  }
+
+  // ===== ゲーム状態 =====
+  let state='idle';              // 'idle' | 'show' | 'input' | 'over'
+  let level=0;
+  let seq=[], idx=0;             // seqはPOSE idの配列、idxは現在の入力ステップ
+  let hold=0;                    // 入力時のキープ秒
+  const HOLD_SEC=1.0;            // 1秒保持（UIで固定）
+  const STEP_TIMEOUT=6.0;        // 各ポーズの最大猶予秒
+  let stepLeft=STEP_TIMEOUT;     // 残り猶予
+
+  function setPhase(p){ phaseEl.textContent=p; }
+
+  function randomPoseId(prevId=null){
+    let id;
+    do{
+      id = POSES[Math.floor(Math.random()*POSES.length)].id;
+    } while (id===prevId); // 同じの連続は避ける
+    return id;
+  }
+
+  function renderSeq(){
+    seqEl.innerHTML='';
+    seq.forEach((id,i)=>{
+      const def = POSES.find(p=>p.id===id);
+      const div = document.createElement('div');
+      div.className = 'tag' + (state==='input' && i===idx ? ' now':'');
+      div.textContent = def ? def.label.replace(/ .+$/,'') : id;
+      seqEl.appendChild(div);
+    });
+  }
+
+  function setCue(text){ cueEl.textContent=text; }
+
+  function meter(p){ const pct=Math.max(0,Math.min(100,Math.round(p*100))); meterEl.style.width=pct+'%'; meterPct.textContent=pct+'%'; }
+
+  function nextLevel(){
+    level++; levelEl.textContent=level;
+    const last = seq.length ? seq[seq.length-1] : null;
+    seq.push( randomPoseId(last) );
+    renderSeq();
+    showSequence();
+  }
+
+  // ===== 合図（表示フェーズ）=====
+  function showSequence(){
+    state='show'; setPhase('お手本');
+    setCue('見て覚えるよ');
+    meter(0); hold=0;
+
+    let t=0, i=0;
+    const tempo = 900; // ms/ポーズ表示
+    const gap   = 350; // ms/間
+
+    function flash(){
+      if (i>=seq.length){
+        // 入力へ
+        setTimeout(beginInput, 350);
+        return;
+      }
+      const id = seq[i];
+      const def = POSES.find(p=>p.id===id);
+      setCue(def ? def.label : id);
+      // 合図音
+      beep(880,0.10);
+      // 強調表示用にタグを一瞬now化
+      [...seqEl.children].forEach((el,idx)=> el.classList.toggle('now', idx===i));
+      setTimeout(()=>{
+        setCue('…'); // ブランク
+        [...seqEl.children].forEach(el=> el.classList.remove('now'));
+        i++; setTimeout(flash, gap);
+      }, tempo);
+    }
+    flash();
+  }
+
+  // ===== 入力フェーズ =====
+  function beginInput(){
+    state='input'; setPhase('あなたの番');
+    idx=0; hold=0; stepLeft=STEP_TIMEOUT;
+    showTargetCue();
+    tickInput();
+  }
+
+  function showTargetCue(){
+    const def = POSES.find(p=>p.id===seq[idx]);
+    setCue(def ? def.label + ' を1秒キープ' : 'ポーズ');
+    renderSeq();
+  }
+
+  function currentPoseOK(){
+    if (!lm) return false;
+    const def = POSES.find(p=>p.id===seq[idx]); if(!def) return false;
+    return def.check(lm);
+  }
+
+  let lastTick = performance.now();
+  function tickInput(){
+    if (state!=='input') return;
+    const now = performance.now(), dt = (now - lastTick)/1000; lastTick = now;
+
+    // 判定（保持バー更新）
+    if (currentPoseOK()){ hold += dt; } else { hold = Math.max(0, hold - dt*0.5); } // 少しずつ減衰
+    meter( hold / HOLD_SEC );
+
+    // 猶予タイマー
+    stepLeft -= dt;
+    if (stepLeft <= 0){
+      // 失敗
+      gameOver(false);
+      return;
+    }
+
+    // 成功（次へ）
+    if (hold >= HOLD_SEC){
+      chime();
+      idx++; hold=0; meter(0); stepLeft=STEP_TIMEOUT;
+      if (idx >= seq.length){
+        // レベルアップ
+        setPhase('クリア！'); setCue('よくできました');
+        setTimeout(nextLevel, 800);
+        return;
+      }
+      showTargetCue();
+    }
+
+    setTimeout(tickInput, 30);
+  }
+
+  function gameOver(bySuccess){
+    state='over'; setPhase('終了'); meter(0);
+    buzz();
+    setCue(`おしまい（到達レベル ${level}）`);
+    show(`到達レベル ${level}、もう一度挑戦しよう`);
+  }
+
+  function resetAll(){
+    state='idle'; level=0; levelEl.textContent='0';
+    seq=[]; idx=0; hold=0; meter(0); setCue('ポーズ表示');
+    phaseEl.textContent='--'; seqEl.innerHTML='';
+  }
+
+  // ===== 操作 =====
+  startBtn.onclick=()=>{
+    if (state==='show' || state==='input') return;
+    resetAll(); nextLevel(); // レベル1開始
+  };
+  stopBtn.onclick=()=>{
+    if (state==='input' || state==='show'){ gameOver(false); }
+  };
+})();
+</script>
+</body></html>

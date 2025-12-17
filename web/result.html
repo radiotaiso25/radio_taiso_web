@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>採点結果</title>
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <!-- 結果ページ用CSS -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/result.css') }}">
+</head>
+<body>
+  {% if recommended_game %}
+    <div id="recommend-wrapper" class="recommend-wrapper">
+      <!-- 右上の小さいボタン（常にこれだけ見える） -->
+      <button id="recommend-toggle" class="recommend-toggle">
+        🎮 おすすめゲーム
+      </button>
+
+      <!-- 折りたたまれている中身 -->
+      <div class="recommend-box">
+        <div class="recommend-header">
+          <span class="recommend-title">あなたにおすすめのゲーム</span>
+          <button id="recommend-close" class="recommend-close" aria-label="閉じる">×</button>
+        </div>
+
+        <div class="recommend-name">
+          {{ recommended_game.label }}
+        </div>
+        <div class="recommend-reason">
+          {{ recommended_game.reason }}
+        </div>
+
+        <a class="recommend-btn" href="/game/{{ recommended_game.id }}">
+          このゲームを始める ▶
+        </a>
+      </div>
+    </div>
+  {% endif %}
+
+  <h1>🏁 採点結果</h1>
+
+  <!-- ▼ 出力ファイル -->
+  <div class="card">
+    <div class="section-title">📄 出力ファイル</div>
+    <p class="result-path">{{ result_path }}</p>
+  </div>
+
+  <!-- ▼ 総合スコア -->
+  <div class="card">
+    <div class="section-title">🏆 総合スコア</div>
+
+    <div class="score-box" style="background: {{ overall_color }}">
+      {{ "%.1f"|format(overall_score) }} 点
+    </div>
+
+    <p class="overall-message">
+      {{ overall_message }}
+    </p>
+  </div>
+
+  <!-- ▼ E別スコア -->
+  <div class="card">
+    <div class="section-title">📊 E別スコア一覧</div>
+
+    <table>
+      <tr><th>体操</th><th>平均スコア</th></tr>
+      {% for row in table_data %}
+      <tr>
+        <td>{{ EXERCISE_LABEL[row['exercise_id']] }}（{{ row['exercise_id'] }}）</td>
+        <td>{{ '%.2f'|format(row['mean_score']) }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+
+  <!-- ▼ 前回比較（ログイン時のみ） -->
+  {% if not session.get('guest') %}
+  <div class="card">
+    <div class="section-title">📈 前回・自己ベストとの比較</div>
+
+    {% if compare_rows and compare_rows|length > 0 %}
+    <table>
+      <tr>
+        <th>体操</th>
+        <th>今回</th>
+        <th>前回</th>
+        <th>差分</th>
+        <th>自己ベスト</th>
+        <th>ベストとの差</th>
+      </tr>
+
+      {% for row in compare_rows %}
+      <tr>
+        <td>{{ row.label }} ({{ row.exercise }})</td>
+        <td>{{ '%.2f'|format(row.curr) }}</td>
+        <td>{% if row.prev is not none %}{{ '%.2f'|format(row.prev) }}{% else %}-{% endif %}</td>
+        <td>{% if row.diff_prev is not none %}{{ '%.2f'|format(row.diff_prev) }}{% else %}-{% endif %}</td>
+        <td>{% if row.best is not none %}{{ '%.2f'|format(row.best) }}{% else %}-{% endif %}</td>
+        <td>{% if row.diff_best is not none %}{{ '%.2f'|format(row.diff_best) }}{% else %}-{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </table>
+
+    {% else %}
+      <p>前回データがありません。</p>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  <!-- ▼ 動きが小さかった部位 -->
+  <div class="card">
+    <div class="section-title">🧩 全体で動きが小さかった部位</div>
+
+    <ul class="feedback-list">
+      {% for msg in global_feedback %}
+        <li>・{{ msg }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+
+  <!-- ▼ 下位3つ -->
+  <div class="card">
+    <div class="section-title">⬇️ スコアが低かった体操（下位3つ）</div>
+
+    <p>
+      {% if low_labels %}
+        {{ low_labels|join("、 ") }}
+      {% else %}
+        特に低い体操はありませんでした。
+      {% endif %}
+    </p>
+  </div>
+
+  <!-- ▼ 部位別アドバイス -->
+  <div class="card">
+    <div class="section-title">🧠 部位別アドバイス</div>
+
+    {% for ex, msg in exercise_advice.items() %}
+      <div class="advice-ex-name">
+        {{ EXERCISE_LABEL[ex] }}（{{ ex }}）
+      </div>
+      <p class="advice-message">
+        💡 {{ msg }}
+      </p>
+    {% endfor %}
+  </div>
+
+  <!-- ▼ グラフ -->
+  <div class="card">
+    <div class="section-title">📉 グラフ</div>
+
+    <canvas id="chart" width="600" height="350"></canvas>
+  </div>
+
+  <!-- ▼ ボタン -->
+  <button onclick="window.location.href='/record'">もう一度体操する</button>
+  <a href="/logout">ログアウト</a>
+
+  <!-- Chart用データをJSに渡す（最小限のinline） -->
+  <script>
+    window.resultChartData = {
+      labels: {{ exercises|tojson|safe }},
+      scores: {{ scores|tojson|safe }}
+    };
+  </script>
+
+  <!-- 結果ページ用JS -->
+  <script src="{{ url_for('static', filename='js/result.js') }}"></script>
+</body>
+</html>

@@ -1,0 +1,156 @@
+/* static/css/chat.css */
+
+body {
+    background-color: rgb(226, 215, 215);
+}
+textarea#errorTextArea {
+    width: 300px;
+    background-color: #ffffff;
+    border: none;
+}
+textarea#messageTextArea {
+    background-color: #e46363;
+    border: none;
+    color: #ffffff;
+}
+textarea#answerTextArea {
+    background-color: #ffffff;
+    border: none;
+}
+
+/* テキストボックスはちょっとだけ小さめにしておくと折り返しにくい */
+.textbox {
+    width: 600px;       /* 800px → 600px とか */
+    padding: 30px 7px;
+    border-radius: 5px;
+    border: 2px solid;
+    font-size: 30px;
+}
+
+/* テキスト＋送信＋録音ボタンを横一列に */
+.example {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 16px;          /* ボタン同士のすき間 */
+    margin-top: 20px;
+}
+
+.error {
+    display: flex;
+    justify-content: flex-end;
+    align-items: flex-end;
+}
+
+/* マイクの画像 */
+input.sitei {
+    vertical-align: bottom;
+    width: 100px;
+    background-color: #dedede;
+    border-radius: 4px;
+    border-width: 4px;
+    border-color: black;
+}
+
+/* アバターの画像 */
+.box-img,
+.box-text {
+    display: inline-block;
+    vertical-align: top;
+}
+
+/* 左右共通のスタイリング */
+.left-side,
+.right-side {
+    width: 600px;
+    padding: 1px 0;
+    overflow: hidden;
+}
+
+.hidari {
+    padding: 1px 0;
+    overflow: hidden;
+}
+
+.bubble {
+    max-width: 150%;
+    width: 550px;
+    padding: 20px;
+    border-radius: 10px;
+    display: inline-block;
+    position: relative;
+}
+
+.hidari-bubble {
+    max-width: 150%;
+    width: 750px;
+    padding: 20px;
+    border-radius: 10px;
+    display: inline-block;
+    position: relative;
+}
+
+.error1 {
+    width: 200px;
+    padding: 20px;
+    border-radius: 10px;
+    display: inline-block;
+    position: relative;
+}
+
+.bubble::before,
+.hidari-bubble::before {
+    content: "";
+    width: 0;
+    height: 0;
+    border: 10px solid transparent;
+    position: absolute;
+}
+
+/* 左側表示の吹き出しのスタイリング */
+.left-side .bubble,
+.hidari .hidari-bubble {
+    margin: 10px 0 0 20px;
+    background: #ffffff;
+}
+.left-side .bubble::before,
+.hidari .hidari-bubble::before {
+    top: 15px;
+    left: -19px;
+    border-right-color: #ffffff;
+}
+
+/* 右側表示の吹き出しのスタイリング */
+.right-side .bubble {
+    float: right;
+    margin: 10px 20px 0 0;
+    background: #e46363;
+}
+.right-side .bubble::before {
+    top: 12px;
+    right: -19px;
+    border-left-color: #e46363;
+}
+
+/* 送信ボタン（紙飛行機） */
+.send-btn {
+    border: none;
+    background: transparent;
+    padding: 0;
+}
+
+/* 紙飛行機アイコン */
+.sitei {
+    vertical-align: bottom;
+    width: 80px;        /* 少し小さめにしておくとレイアウト安定する */
+    background-color: #dedede;
+    border-radius: 4px;
+    border-width: 4px;
+    border-color: black;
+}
+
+/* 録音ボタン側にちょっと余白 */
+.mic-area {
+    display: flex;
+    align-items: stretch;
+}

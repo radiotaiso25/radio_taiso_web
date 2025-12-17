@@ -1,0 +1,81 @@
+/* ページ全体 */
+body {
+  text-align: center;
+  background: #f0f8ff;
+  font-family: sans-serif;
+  margin: 0;
+  padding: 20px;
+}
+
+/* タイトル */
+h1 {
+  margin-bottom: 10px;
+}
+
+/* スコア表示 */
+#score {
+  font-size: 22px;
+  font-weight: bold;
+  color: #2b78e4;
+  margin-top: 10px;
+  white-space: pre-wrap;
+}
+
+/* ビデオ・キャンバス周り */
+#video {
+  display: none;
+}
+
+#video-area {
+  position: relative;
+  display: inline-block;
+}
+
+/* キャンバス（映像表示） */
+#canvas {
+  width: 720px;
+  height: 540px;
+  display: block;
+  margin: 10px auto;
+  border-radius: 10px;
+}
+
+/* カウントダウン表示 */
+#countdown {
+  position: absolute;
+  top: 45%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 100px;
+  font-weight: bold;
+  color: red;
+  text-shadow: 3px 3px 10px black;
+  z-index: 10;
+  pointer-events: none;
+}
+
+/* ボタンエリア */
+#button-area {
+  margin-top: 10px;
+}
+
+/* ボタン共通 */
+button {
+  font-size: 18px;
+  padding: 10px 20px;
+  margin: 5px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+/* 個別ボタン色 */
+#start-btn {
+  background: #4caf50;
+  color: white;
+}
+
+#stop-btn {
+  background: #e53935;
+  color: white;
+}

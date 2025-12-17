@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>お話しましょ</title>
+
+    <!-- Bootstrap -->
+    <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/css/bootstrap.min.css"
+          rel="stylesheet">
+
+    <!-- ここが超重要：外部CSSを読む -->
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='css/chat.css') }}">
+</head>
+<body>
+
+<script>
+  // Flask のセッションから user_id を埋め込む
+  // ログインユーザ → "01" とか
+  // ゲスト → "guest"
+  const CURRENT_USER_ID = "{{ session.get('user_id', 'guest') }}";
+</script>
+
+<div class="box">
+    <div class="box-img">
+      <img src="{{ url_for('static', filename='image/avatar.png') }}" width="200">
+    <div class="box-text">
+        <!--左側表示の吹き出し -->
+        <div class="left-side">
+            <div class="bubble">
+                <font size="5">
+                    こんにちは。気になる体の部分はありますか。
+                </font>
+            </div>
+        </div>
+
+        <!-- エラー表示の吹き出し -->
+        <form>
+            <input onclick="connect()" value="Connect" type="button">  
+            <input onclick="disconnect()" value="Disconnect" type="button">
+        </form>
+
+        <div class="error">
+            <div class="left-side">
+                <div class="text">
+                    <div class="error1">
+                        <font size="5">
+                            <a id="todo-list">
+                                <textarea id="errorTextArea" rows="3" cols="10"></textarea>
+                            </a>
+                        </font>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 右側表示の吹き出し -->
+            <div class="right-side">
+                <div class="bubble">
+                    <div class="text">
+                        <font size="5">
+                        <a id="todo-list">
+                            <textarea id="messageTextArea" rows="3" cols="43"></textarea>
+                        </a>
+                        </font>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 左側表示の吹き出し（回答） -->
+        <div class="hidari">
+            <div class="hidari-bubble">
+                <div class="text">
+                    <font size="5">
+                    <a id="todo-list">
+                        <textarea id="answerTextArea" rows="5" cols="60"></textarea>
+                    </a>
+                    </font>
+                </div>
+            </div>
+        </div>
+
+        <!-- ラジオ体操への誘導 -->
+        <div class="left-side">
+            <div class="bubble">
+                <font size="5">
+                    ラジオ体操をしましょう
+                    <a href="/record" onclick="onTaisoLinkClick(event)">こちら</a>です。
+                </font>
+            </div>
+        </div>
+
+        <!-- テキストボックスとマイク -->
+        <div class="example">
+            <!-- テキスト + 送信ボタン -->
+            <form onsubmit="sendMessage(); return false;" class="input-area">
+                <input type="text" id="input" placeholder="ここに入力" class="textbox">
+
+                <button type="submit" class="send-btn">
+                    <img
+                        class="sitei"
+                        src="{{ url_for('static', filename='image/kamihikouki.png') }}"
+                        alt="送信"
+                    >
+                </button>
+            </form>
+
+            <!-- 録音ボタン（Vue） -->
+            <div id="app" class="mic-area">
+                <button class="btn btn-danger" type="button"
+                        v-if="status=='ready'" @click="startRecording">
+                    <p>音声を録音します。</p><p>ボタンを押し</p><p>話しかけてください。</p>
+                </button>
+
+                <button class="btn btn-primary" type="button"
+                        v-if="status=='recording'" @click="stopRecording">
+                    <p> 会話が終了します。</p><p>ボタンを押し</p><p>録音を止めてください</p>
+                </button>
+            </div>
+        </div>
+
+        <!-- Vue 本体 & 外部JS -->
+        <script src="https://cdn.jsdelivr.net/npm/vue@2.6.0"></script>
+        <script src="{{ url_for('static', filename='js/chat.js') }}"></script>
+       </div>
+    </div>
+</div>
+</body>
+</html>

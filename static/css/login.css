@@ -1,0 +1,66 @@
+/* 全体 */
+body {
+  font-family: sans-serif;
+  background: #f0f8ff;
+  text-align: center;
+  margin-top: 80px;
+}
+
+/* センターボックス */
+.box {
+  display: inline-block;
+  padding: 30px 40px;
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  min-width: 320px;
+}
+
+/* タイトル・説明 */
+h1 {
+  margin-bottom: 10px;
+}
+p {
+  margin-top: 0;
+  color: #555;
+}
+
+/* 入力欄 */
+input[type="text"] {
+  width: 80%;
+  padding: 8px 10px;
+  font-size: 16px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  margin-top: 10px;
+}
+
+/* ログインボタン共通 */
+button {
+  margin-top: 15px;
+  padding: 8px 20px;
+  font-size: 16px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  background: #4caf50;
+  color: #fff;
+}
+
+/* ゲストボタン */
+.guest-btn {
+  background: #777;
+  color: white;
+  padding: 10px 20px;
+  border-radius: 8px;
+  cursor: pointer;
+  border: none;
+  margin-top: 5px;
+}
+
+/* エラー表示 */
+.error {
+  color: #e53935;
+  margin-top: 10px;
+  font-size: 14px;
+}
