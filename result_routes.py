@@ -14,7 +14,7 @@
 # =============================================================
 
 from flask import Blueprint, render_template, session
-from .recommend_game import recommend_game
+from recommend_game import recommend_game
 import os, csv, random
 import pandas as pd
 
