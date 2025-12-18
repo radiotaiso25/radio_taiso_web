@@ -17,14 +17,15 @@ from flask import Flask, request, jsonify, render_template, redirect, url_for, s
 import os, uuid, csv, json, subprocess
 import pandas as pd
 
-# === Blueprint ===
+# === Blueprints ===
 from login_routes import auth_bp
 from result_routes import result_bp
+from chat_routes import chat_bp   # ←★追加！！！
 
 # ============================================================
 # Flaskアプリ
 # ============================================================
-app = Flask(__name__, template_folder="web")
+app = Flask(__name__, template_folder="web")   # ← web をテンプレートとして使う
 app.secret_key = "radio-taiso-secret-key-2025"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -49,6 +50,7 @@ def run_script(cmd):
 # ============================================================
 app.register_blueprint(auth_bp)
 app.register_blueprint(result_bp)
+app.register_blueprint(chat_bp)   # ←★追加！！！
 
 # ============================================================
 # ページ遷移
