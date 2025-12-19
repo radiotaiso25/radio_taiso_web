@@ -25,7 +25,7 @@ def login():
 
         session.clear()
         session["user_id"] = user_id
-        return redirect(url_for("chat_page"))
+        return redirect(url_for("chat.chat_page"))
 
     return render_template("login.html")
 
@@ -37,7 +37,7 @@ def guest_login():
     session.clear()
     session["guest"] = True
     print("🚪 ゲストログイン")
-    return redirect(url_for("chat_page"))
+    return redirect(url_for("chat.chat_page"))
 
 # -------------------------------------------------------------
 # /logout
