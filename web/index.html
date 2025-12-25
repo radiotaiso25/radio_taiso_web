@@ -4,13 +4,9 @@
   <meta charset="UTF-8" />
   <title>ラジオ体操録画・採点アプリ</title>
 
-  <!-- ★ CSS 読み込み -->
-  <!-- Flaskなら:
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/radio_taiso.css') }}">
-  -->
   <link rel="stylesheet" href="{{ url_for('static', filename='css/index.css') }}">
 
-  <!-- Mediapipe 関連ライブラリ -->
+  <!-- Mediapipe -->
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
 </head>
@@ -19,20 +15,17 @@
   <div id="score">ステップ: 未開始</div>
 
   <div id="video-area">
+    <!-- ★ Android対応必須 -->
     <video id="video" autoplay playsinline muted></video>
     <canvas id="canvas"></canvas>
     <div id="countdown"></div>
   </div>
 
   <div id="button-area">
-    <button id="start-btn">録画スタート</button>
-    <button id="stop-btn" disabled>録画停止</button>
+    <button id="start-btn">開始</button>
+    <button id="stop-btn" disabled>停止</button>
   </div>
 
-  <!-- ★ アプリ用JS 読み込み（ライブラリのあと） -->
-  <!-- Flaskなら:
-  <script src="{{ url_for('static', filename='js/radio_taiso.js') }}"></script>
-  -->
   <script src="{{ url_for('static', filename='js/index.js') }}"></script>
 </body>
 </html>
