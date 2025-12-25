@@ -28,7 +28,7 @@ def chat_page():
 @chat_bp.route("/chat_api", methods=["POST"])
 def chat_api():
     try:
-        user_message = request.json.get("user_message", "")
+        user_message = request.json.get("message", "")
 
         if not user_message:
             return jsonify({"error": "メッセージが空です"}), 400

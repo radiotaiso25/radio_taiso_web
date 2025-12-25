@@ -123,15 +123,16 @@ function sendAudio() {
     console.log("send audio trigger");
 }
 
-function sendMessage() {
-    var messageInput = document.getElementById("input");
-    var text = messageInput.value.trim();
+async function sendMessage() {
+    const messageInput = document.getElementById("input");
+    const text = messageInput.value.trim();
     if (!text) return;
 
-    // 画面の右側（自分の吹き出し）には今まで通り表示
+    // 自分の吹き出し表示
     messageTextArea.value += text + "\n";
+    messageInput.value = "";
 
-    // ★ 体操開始トリガー判定
+    // ★ 体操開始トリガー判定（これはそのまま）
     const triggerWords = [
         "体操したい", "対象したい", "体操する", "対象する",
         "ラジオ体操したい", "ラジオ対象したい",
@@ -144,25 +145,36 @@ function sendMessage() {
         const now = new Date().toISOString();
         localStorage.setItem("taiso_trigger_text", text);
         localStorage.setItem("taiso_trigger_time", now);
-
-        if (webSocket && webSocket.readyState === WebSocket.OPEN) {
-            webSocket.close();
-        }
-
-        messageInput.value = "";
-
         setTimeout(() => {
             window.location.href = "/record";
         }, 800);
         return;
     }
 
-    // 普通の会話モード
-    var Hello = text + "\n";
-    webSocket.send(Hello);
-    messageInput.value = "";
-    console.log("send");
+    // ===== HTTPでサーバへ送信 =====
+    try {
+        const res = await fetch("/chat_api", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                message: text,
+                user_id: CURRENT_USER_ID
+            })
+        });
+
+        if (!res.ok) {
+            throw new Error("Server error");
+        }
+
+        const data = await res.json();
+        answerTextArea.value = data.reply;
+
+    } catch (e) {
+        console.error(e);
+        answerTextArea.value = "エラーが発生しました";
+    }
 }
+
 
 function onTaisoLinkClick(event) {
     const now = new Date().toISOString();
