@@ -62,8 +62,13 @@ def show_result(student_id):
     part_path    = os.path.join(student_dir, "results_score", "student_part_error.csv")
 
     # 結果が無ければ 404 返して終了
+    # 結果が無ければ採点待ち画面を表示
     if not os.path.exists(summary_path):
-        return f"結果ファイルが見つかりません: {summary_path}", 404
+        return render_template(
+            "scoring_wait.html",
+            student_id=student_id
+        )
+
 
     # ===== 今回のスコア（DataFrame） =====
     df_curr = pd.read_csv(summary_path)
