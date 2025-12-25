@@ -58,8 +58,12 @@ def voice_api():
 
         audio_file = request.files["audio"]
 
+        print("audio filename:", audio_file.filename)
+        print("audio content_type:", audio_file.content_type)
+
+
         # Render対策：一時ファイルに保存
-        with tempfile.NamedTemporaryFile(suffix=".wav") as tmp:
+        with tempfile.NamedTemporaryFile(suffix=".webm") as tmp:
             audio_file.save(tmp.name)
 
             transcript = client.audio.transcriptions.create(
@@ -72,3 +76,5 @@ def voice_api():
     except Exception as e:
         print("音声認識エラー:", e)
         return jsonify({"error": str(e)}), 500
+
+    
