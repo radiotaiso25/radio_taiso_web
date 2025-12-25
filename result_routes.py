@@ -64,10 +64,7 @@ def show_result(student_id):
     # 結果が無ければ 404 返して終了
     # 結果が無ければ採点待ち画面を表示
     if not os.path.exists(summary_path):
-        return render_template(
-            "scoring_wait.html",
-            student_id=student_id
-        )
+        return f"結果ファイルが見つかりません: {summary_path}", 404
 
 
     # ===== 今回のスコア（DataFrame） =====

@@ -21,7 +21,6 @@ import pandas as pd
 from login_routes import auth_bp
 from result_routes import result_bp
 from chat_routes import chat_bp   # ←★追加！！！
-
 # ============================================================
 # Flaskアプリ
 # ============================================================
@@ -51,7 +50,6 @@ def run_script(cmd):
 app.register_blueprint(auth_bp)
 app.register_blueprint(result_bp)
 app.register_blueprint(chat_bp)   # ←★追加！！！
-
 # ============================================================
 # ページ遷移
 # ============================================================
@@ -67,6 +65,8 @@ def record_page():
 # ============================================================
 # ★ landmarks → CSV に変換して採点（録画なし版の本体）
 # ============================================================
+print("### /score_landmarks CALLED ###", flush=True)
+
 @app.route("/score_landmarks", methods=["POST"])
 def score_landmarks():
     """

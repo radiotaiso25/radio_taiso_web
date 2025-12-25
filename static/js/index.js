@@ -9,8 +9,6 @@ const countdownEl = document.getElementById("countdown");
 
 // ===== 状態 =====
 let camera = null;
-let mediaRecorder = null;
-let recordedChunks = [];
 let running = false;
 let countingDown = false;
 let insideTimer = 0;
@@ -18,9 +16,12 @@ let insideBox = false;
 let showBox = true;
 let cameraStarted = false;
 
+// ★ landmarks を溜める
+let allFrames = [];
+
 const INSIDE_FRAMES = 30;
 
-// 描画サイズ（これは安全）
+// 描画サイズ
 canvas.width = 720;
 canvas.height = 540;
 
@@ -62,13 +63,21 @@ pose.onResults(results => {
   ctx.scale(-1, 1);
   ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
 
-  if (showBox) {
-    const boxX = canvas.width * 0.1;
-    const boxY = canvas.height * 0.05;
-    const boxW = canvas.width * 0.8;
-    const boxH = canvas.height * 0.9;
+  if (results.poseLandmarks) {
+    // ★ landmarks を保存
+    const frame = results.poseLandmarks.map(p => [
+      p.x, p.y, p.z, p.visibility
+    ]);
+    if (running) {
+      allFrames.push(frame);
+    }
 
-    if (results.poseLandmarks) {
+    if (showBox) {
+      const boxX = canvas.width * 0.1;
+      const boxY = canvas.height * 0.05;
+      const boxW = canvas.width * 0.8;
+      const boxH = canvas.height * 0.9;
+
       const ids = [0, 11, 12, 23, 24, 27, 28];
       insideBox = ids.every(i => {
         const p = results.poseLandmarks[i];
@@ -78,29 +87,27 @@ pose.onResults(results => {
           p.y > boxY / canvas.height &&
           p.y < (boxY + boxH) / canvas.height;
       });
-    } else {
-      insideBox = false;
-    }
 
-    ctx.strokeStyle = insideBox ? "lime" : "red";
-    ctx.lineWidth = 5;
-    ctx.strokeRect(boxX, boxY, boxW, boxH);
+      ctx.strokeStyle = insideBox ? "lime" : "red";
+      ctx.lineWidth = 5;
+      ctx.strokeRect(boxX, boxY, boxW, boxH);
 
-    if (insideBox && !running && !countingDown) {
-      insideTimer++;
-      if (insideTimer > INSIDE_FRAMES) {
+      if (insideBox && !running && !countingDown) {
+        insideTimer++;
+        if (insideTimer > INSIDE_FRAMES) {
+          insideTimer = 0;
+          startCountdown();
+        }
+      } else {
         insideTimer = 0;
-        startCountdown();
       }
-    } else {
-      insideTimer = 0;
     }
   }
 
   ctx.restore();
 });
 
-// ===== カメラ準備（起動しない）=====
+// ===== カメラ準備 =====
 function prepareCamera() {
   if (camera) return;
   camera = new Camera(video, {
@@ -110,7 +117,7 @@ function prepareCamera() {
   });
 }
 
-// ===== カメラ起動（ユーザー操作後）=====
+// ===== カメラ起動 =====
 async function startCameraOnce() {
   if (cameraStarted) return;
   prepareCamera();
@@ -140,7 +147,7 @@ function startCountdown() {
       countdownEl.textContent = "";
       countingDown = false;
       showBox = false;
-      startRecording();
+      startExercise();
     }
   }, 1000);
 }
@@ -152,17 +159,10 @@ function showStep(i) {
     : "完了！採点中...";
 }
 
-// ===== 録画 =====
-async function startRecording() {
+// ===== 体操開始 =====
+async function startExercise() {
   running = true;
-  recordedChunks = [];
-  const stream = video.srcObject;
-
-  mediaRecorder = new MediaRecorder(stream, { mimeType: "video/webm" });
-  mediaRecorder.ondataavailable = e => e.data.size && recordedChunks.push(e.data);
-  mediaRecorder.onstop = uploadVideo;
-  mediaRecorder.start();
-
+  allFrames = [];
   startBtn.disabled = true;
   stopBtn.disabled = false;
   showStep(0);
@@ -174,33 +174,35 @@ async function startRecording() {
     if (i < steps.length) {
       showStep(i);
       setTimeout(next, steps[i].duration);
-    } else stopRecording();
+    } else {
+      stopExercise();
+    }
   }
   setTimeout(next, steps[0].duration);
 }
 
-function stopRecording() {
+// ===== 体操終了 → 採点送信 =====
+async function stopExercise() {
   running = false;
   stopBtn.disabled = true;
   startBtn.disabled = false;
-  if (mediaRecorder?.state !== "inactive") mediaRecorder.stop();
   showStep(-1);
-}
+  scoreEl.textContent = "採点中...";
 
-// ===== アップロード =====
-async function uploadVideo() {
-  const blob = new Blob(recordedChunks, { type: "video/webm" });
-  const fd = new FormData();
-  fd.append("video", blob, "student_recording.webm");
-  scoreEl.textContent = "アップロード中...";
+  const res = await fetch("/score_landmarks", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ frames: allFrames })
+  });
 
-  const res = await fetch("/upload", { method: "POST", body: fd });
-  if (res.redirected) location.href = res.url;
+  if (res.redirected) {
+    location.href = res.url;
+  }
 }
 
 // ===== ボタン =====
 startBtn.onclick = async () => {
-  await startCameraOnce();   // ★ Android対応の核心
+  await startCameraOnce();
 };
 
-stopBtn.onclick = stopRecording;
+stopBtn.onclick = stopExercise;

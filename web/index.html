@@ -27,5 +27,20 @@
   </div>
 
   <script src="{{ url_for('static', filename='js/index.js') }}"></script>
+
+  <script>
+  async function sendLandmarks(frames) {
+    const res = await fetch("/score_landmarks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ frames })
+    });
+
+    if (res.redirected) {
+      location.href = res.url;
+    }
+  }
+  </script>
+
 </body>
 </html>
