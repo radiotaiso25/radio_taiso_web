@@ -28,24 +28,24 @@ def chat_page():
 @chat_bp.route("/chat_api", methods=["POST"])
 def chat_api():
     try:
-        user_message = request.json.get("message", "")
+        data = request.get_json()
+        user_message = data.get("message", "")
 
         if not user_message:
             return jsonify({"error": "メッセージが空です"}), 400
 
-        # GPT へ問い合わせ
         response = openai.chat.completions.create(
-            model="gpt-4o-mini",   # 軽量で速く安いモデル
+            model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": "あなたは優しい体操コーチAIです。"},
                 {"role": "user", "content": user_message}
             ]
         )
 
-        reply = response.choices[0].message["content"]
-
+        reply = response.choices[0].message.content
         return jsonify({"reply": reply})
 
     except Exception as e:
         print("チャットAPI エラー:", e)
         return jsonify({"error": str(e)}), 500
+
