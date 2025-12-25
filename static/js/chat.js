@@ -1,20 +1,19 @@
 // static/js/chat.js
-
-// グローバル変数（HTML 側で CURRENT_USER_ID は定義されている前提）
-var webSocket; //ウェブソケット
+// WebSocket完全撤去版 / HTTP + Whisper API 対応
 
 var errorTextArea = document.getElementById("errorTextArea");
 var answerTextArea = document.getElementById("answerTextArea");
 var messageTextArea = document.getElementById("messageTextArea");
 
-// ===== Vue（録音ボタンまわり） =====
+// ================================
+// Vue（録音ボタンまわり）
+// ================================
 new Vue({
     el: '#app',
     data: {
         status: 'init',
         recorder: null,
-        audioData: [],
-        audioExtension: ''
+        audioData: []
     },
     methods: {
         startRecording() {
@@ -25,114 +24,78 @@ new Vue({
         stopRecording() {
             this.recorder.stop();
             this.status = 'ready';
-        },
-        getExtension(audioType) {
-            let extension = 'wav';
-            const matches = audioType.match(/audio\/([^;]+)/);
-            if (matches) {
-                extension = matches[1];
-            }
-            return '.' + extension;
         }
     },
     mounted() {
         navigator.mediaDevices.getUserMedia({ audio: true })
             .then(stream => {
                 this.recorder = new MediaRecorder(stream);
+
                 this.recorder.addEventListener('dataavailable', e => {
                     this.audioData.push(e.data);
-                    this.audioExtension = this.getExtension(e.data.type);
                 });
-                this.recorder.addEventListener('stop', () => {
-                    const audioBlob = new Blob(this.audioData);
-                    // 音声を Whisper サーバに使ってもらうトリガー
-                    sendAudio();
 
-                    const url = URL.createObjectURL(audioBlob);
-                    let a = document.createElement('a');
-                    a.href = url;
-                    a.download = "sample" + this.audioExtension;
-                    document.body.appendChild(a);
-                    a.click();
+                this.recorder.addEventListener('stop', async () => {
+                    const audioBlob = new Blob(this.audioData, { type: "audio/wav" });
+
+                    try {
+                        // ① Whisper API に音声送信
+                        const text = await sendAudioBlob(audioBlob);
+
+                        // ② 認識結果を入力欄に反映
+                        document.getElementById("input").value = text;
+
+                        // ③ そのままチャット送信
+                        await sendMessage();
+
+                    } catch (e) {
+                        console.error(e);
+                        answerTextArea.value = "音声認識に失敗しました";
+                    }
                 });
+
                 this.status = 'ready';
+            })
+            .catch(err => {
+                console.error(err);
+                errorTextArea.value = "マイクの使用が許可されていません";
             });
     }
 });
 
-// ===== WebSocket 関連 =====
+// ================================
+// 音声 → Whisper API
+// ================================
+async function sendAudioBlob(audioBlob) {
+    const formData = new FormData();
+    formData.append("audio", audioBlob, "voice.wav");
 
-function connect() {
-    webSocket = new WebSocket("ws://localhost:8001"); // インスタンスを作り、サーバと接続
+    const res = await fetch("/voice_api", {
+        method: "POST",
+        body: formData
+    });
 
-    webSocket.onopen = function (message) {
-        errorTextArea.value += "接続中\n";
-        // 最初に「この接続は誰のものか」を Whisper に教える
-        webSocket.send("__USERID__:" + CURRENT_USER_ID);
-    };
+    if (!res.ok) {
+        throw new Error("voice api error");
+    }
 
-    webSocket.onclose = function (message) {
-        errorTextArea.value += "接続停止\n";
-    };
-
-    webSocket.onerror = function (message) {
-        errorTextArea.value += "error...\n";
-    };
-
-    webSocket.onmessage = function (message) {
-        // ★ Whisper から「体操に行って」と合図が来たとき
-        if (message.data === "__GO_RECORD__") {
-            const now = new Date().toISOString();
-            localStorage.setItem("taiso_trigger_text", "voice");
-            localStorage.setItem("taiso_trigger_time", now);
-            window.location.href = "/record";
-            return;
-        }
-
-        if (message.data.includes('.mp4') && message.data.includes('file:')) {
-            const urls = message.data.split(' ');
-            localStorage.setItem('url_1', urls[0]);
-            localStorage.setItem('url_2', urls[1]);
-            localStorage.setItem('url_3', urls[2]);
-        }
-        else if (message.data.includes('.mp4')) {
-            const names = message.data.split(' ');
-            localStorage.setItem('name_1', names[0]);
-            localStorage.setItem('name_2', names[1]);
-            localStorage.setItem('name_3', names[2]);
-        }
-        else {
-            if (message.data.substring(0, 1) == "0") {
-                // ０はユーザで、１はAIです。
-                messageTextArea.value = message.data.substring(1);
-            }
-            else if (message.data.substring(0, 1) == "1") {
-                let messag = message.data.replaceAll('。', '。\n');
-                let messa = messag.replaceAll('？', '？\n');
-                answerTextArea.value = messa.substring(1);
-                console.log(messa);
-            }
-        }
-    };
+    const data = await res.json();
+    return data.text;
 }
 
-function sendAudio() {
-    // 「onsei」という合図を送る
-    const Hello = "onsei";
-    webSocket.send(Hello);
-    console.log("send audio trigger");
-}
-
+// ================================
+// テキストチャット（HTTP）
+// ================================
 async function sendMessage() {
     const messageInput = document.getElementById("input");
     const text = messageInput.value.trim();
     if (!text) return;
 
-    // 自分の吹き出し表示
+    // ユーザー発言表示
     messageTextArea.value += text + "\n";
     messageInput.value = "";
 
-    // ★ 体操開始トリガー判定（これはそのまま）
+    // ★ 体操開始トリガー判定（既存仕様そのまま）
     const triggerWords = [
         "体操したい", "対象したい", "体操する", "対象する",
         "ラジオ体操したい", "ラジオ対象したい",
@@ -151,7 +114,6 @@ async function sendMessage() {
         return;
     }
 
-    // ===== HTTPでサーバへ送信 =====
     try {
         const res = await fetch("/chat_api", {
             method: "POST",
@@ -163,7 +125,7 @@ async function sendMessage() {
         });
 
         if (!res.ok) {
-            throw new Error("Server error");
+            throw new Error("chat api error");
         }
 
         const data = await res.json();
@@ -175,18 +137,11 @@ async function sendMessage() {
     }
 }
 
-
+// ================================
+// リンクトリガー（既存）
+// ================================
 function onTaisoLinkClick(event) {
     const now = new Date().toISOString();
     localStorage.setItem("taiso_trigger_text", "link_click");
     localStorage.setItem("taiso_trigger_time", now);
 }
-
-function disconnect() {
-    if (webSocket) {
-        webSocket.close();
-    }
-}
-
-// ページ読み込み時に自動で接続
-window.addEventListener('load', connect);
