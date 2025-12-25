@@ -64,7 +64,7 @@ def voice_api():
 
             transcript = client.audio.transcriptions.create(
                 file=open(tmp.name, "rb"),
-                model="gpt-4o-mini-transcribe"
+                model="whisper-1"
             )
 
         return jsonify({"text": transcript.text})
