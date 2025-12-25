@@ -3,4 +3,4 @@ gunicorn==21.2.0
 numpy==1.26.4
 pandas==1.5.3
 tqdm==4.66.1
-openai
+openai>=1.0.0
