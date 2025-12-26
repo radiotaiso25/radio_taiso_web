@@ -33,7 +33,7 @@ HOP = 15
 
 
 # ====== 教師の時間モデル読み込み ======
-MODEL_JSON = "../data/teacher_timing_model.json"
+MODEL_JSON = "data/teacher_timing_model.json"
 with open(MODEL_JSON, "r") as f:
     E_TIMES_LIST = json.load(f)
 
